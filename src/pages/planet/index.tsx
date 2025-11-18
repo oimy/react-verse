@@ -2,8 +2,8 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import CanvasContext from "./contexts/canvas-context";
 import PlanetContext from "./contexts/planet-context";
 import SpaceContext from "./contexts/space-context";
-import type Planet from "./utils/models/planet";
-import type Point from "./utils/models/point";
+import type Planet from "./models/planet";
+import type Point from "./models/point";
 import OrbitEngine from "./utils/orbit-engine";
 import { BoundPositionOrbitResetter } from "./utils/orbit-resetter";
 import { PlanetFactory } from "./utils/planet-factory.utils";
@@ -65,7 +65,7 @@ export default function PlanetPage() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number>(null);
     const lastUpdateTimeRef = useRef(0);
-    const updateInterval = 30;
+    const updateInterval = useRef(30);
 
     const [planets, setPlanets] = useState<Planet[]>(initialPlanets);
     const [trajectories, setTrajectories] = useState<{ id: number; points: Point[] }[]>(
@@ -119,11 +119,6 @@ export default function PlanetPage() {
             );
             ctx.fillStyle = "lightgray";
             ctx.fill();
-
-            ctx.font = "10px Arial";
-            ctx.textAlign = "center";
-            // const textYOffset = planet.position.y + planet.radius - 15;
-            // ctx.fillText(planet.name, planet.position.x, textYOffset);
         });
     }, [canvasContext.height, canvasContext.width, planets, trajectories]);
 
@@ -136,7 +131,7 @@ export default function PlanetPage() {
 
     useEffect(() => {
         const animate = (timestamp: number) => {
-            if (timestamp >= lastUpdateTimeRef.current + updateInterval) {
+            if (timestamp >= lastUpdateTimeRef.current + updateInterval.current) {
                 const nextPlanets: Planet[] = orbitEngine.createNextPlanets(planets);
                 orbitResetter.resetMany(nextPlanets, initialPlanets);
                 setTrajectories((prev) => {
@@ -173,21 +168,6 @@ export default function PlanetPage() {
     return (
         <div>
             <canvas ref={canvasRef} width={canvasContext.width} height={canvasContext.height} />
-            {/* <table>
-                <tbody>
-                    {planets.map((planet) => (
-                        <tr>
-                            <td>{planet.name}</td>
-                            <td>{planet.position.x.toLocaleString()}</td>
-                            <td>{planet.position.y.toLocaleString()}</td>
-                            <td>{planet.position.z.toLocaleString()}</td>
-                            <td>{planet.velocity.x.toLocaleString()}</td>
-                            <td>{planet.velocity.y.toLocaleString()}</td>
-                            <td>{planet.velocity.z.toLocaleString()}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table> */}
         </div>
     );
 }

@@ -1,4 +1,4 @@
-import type Point from "./models/point";
+import type Point from "../models/point";
 
 export class PointFactory {
     static zero(): Point {

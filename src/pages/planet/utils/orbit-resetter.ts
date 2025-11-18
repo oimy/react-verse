@@ -1,9 +1,10 @@
-import type Planet from "./models/planet";
-import type Point from "./models/point";
+import type Planet from "../models/planet";
+import type Point from "../models/point";
 import { PointFactory } from "./point-factory.utils";
 
 export default interface OrbitResetter {
     reset(targetPlanet: Planet, originalPlanet: Planet): void;
+    resetMany(targetPlanets: Planet[], originalPlanets: Planet[]): void;
     check(planet: Planet): boolean;
 }
 
