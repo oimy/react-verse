@@ -1,5 +1,5 @@
-import type Planet from "./models/planet";
-import type Point from "./models/point";
+import type Planet from "../models/planet";
+import type Point from "../models/point";
 
 export class PlanetFactory {
     static create(id: number, name: string, mass: number, radius: number, position: Point, velocity: Point): Planet {
