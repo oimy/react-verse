@@ -4,8 +4,12 @@ import PlanetContext from "./contexts/planet-context";
 import SpaceContext from "./contexts/space-context";
 import type Planet from "./utils/models/planet";
 import type Point from "./utils/models/point";
-import OrbitEngine from "./utils/orbit-engine";
-import { BoundPositionOrbitResetter } from "./utils/orbit-resetter";
+import { SimpleOrbitAccelerator } from "./utils/orbits/orbit-accelerator";
+import OrbitEngine from "./utils/orbits/orbit-engine";
+import { SimpleOrbitProcessor } from "./utils/orbits/orbit-processor";
+import { SimpleOrbitResetter } from "./utils/orbits/orbit-resetter";
+import type OrbitValidator from "./utils/orbits/orbit-validator";
+import { PositionOrbitValidator } from "./utils/orbits/orbit-validator";
 import { PlanetFactory } from "./utils/planet-factory.utils";
 import { PlanetPositionFactory, PlanetVelocityFactory, PointFactory } from "./utils/point-factory.utils";
 
@@ -49,19 +53,20 @@ export default function PlanetPage() {
             PointFactory.zero()
         ),
     ]);
-    const orbitEngine = useMemo(
-        () => new OrbitEngine(spaceContext.gravity, spaceContext.tick),
-        [spaceContext.gravity, spaceContext.tick]
-    );
-    const orbitResetter = useMemo(
+    const orbitValidator: OrbitValidator = useMemo(
         () =>
-            new BoundPositionOrbitResetter(
-                PointFactory.create(canvasContext.width, canvasContext.height, 0),
-                PointFactory.zero()
-                // PointFactory.create(canvasContext.width * -1, canvasContext.height * -1, 0)
+            new PositionOrbitValidator(
+                PointFactory.create(canvasContext.width * 2, canvasContext.height * 2, 0),
+                PointFactory.create(canvasContext.width * -1, canvasContext.height * -1, 0)
             ),
         [canvasContext.height, canvasContext.width]
     );
+    const orbitEngine: OrbitEngine = useMemo(() => {
+        const orbitAccelerator = new SimpleOrbitAccelerator(spaceContext.gravity);
+        const orbitProcessor = new SimpleOrbitProcessor(spaceContext.tick);
+        const orbitResetter = new SimpleOrbitResetter(orbitValidator, initialPlanets);
+        return new OrbitEngine(orbitAccelerator, orbitProcessor, orbitResetter);
+    }, [initialPlanets, orbitValidator, spaceContext.gravity, spaceContext.tick]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number>(null);
     const lastUpdateTimeRef = useRef(0);
@@ -138,12 +143,11 @@ export default function PlanetPage() {
         const animate = (timestamp: number) => {
             if (timestamp >= lastUpdateTimeRef.current + updateInterval) {
                 const nextPlanets: Planet[] = orbitEngine.createNextPlanets(planets);
-                orbitResetter.resetMany(nextPlanets, initialPlanets);
                 setTrajectories((prev) => {
                     const newTrajectories = prev.map((t) => {
                         const planet: Planet | undefined = planets.find((p) => p.id === t.id);
                         if (planet) {
-                            if (orbitResetter.check(planet)) {
+                            if (!orbitValidator.validate(planet)) {
                                 return { id: t.id, points: [] };
                             }
                             const newPoints = [...t.points, PointFactory.copy(planet.position)];
@@ -168,7 +172,7 @@ export default function PlanetPage() {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [initialPlanets, orbitEngine, planets, orbitResetter]);
+    }, [initialPlanets, orbitEngine, planets, orbitValidator]);
 
     return (
         <div>
