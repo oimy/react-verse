@@ -1,5 +1,5 @@
-import type Planet from "../models/planet";
-import type Point from "../models/point";
+import type Planet from "../../models/planet";
+import type Point from "../../models/point";
 
 export default interface OrbitValidator {
     validate(planet: Planet): boolean;

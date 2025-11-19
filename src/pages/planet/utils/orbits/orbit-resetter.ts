@@ -1,4 +1,4 @@
-import type Planet from "../models/planet";
+import type Planet from "../../models/planet";
 import { PointFactory } from "../point-factory.utils";
 import type OrbitValidator from "./orbit-validator";
 

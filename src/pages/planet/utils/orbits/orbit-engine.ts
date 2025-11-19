@@ -1,5 +1,5 @@
-import type Planet from "../models/planet";
-import type Point from "../models/point";
+import type Planet from "../../models/planet";
+import type Point from "../../models/point";
 import type { OrbitAccelerator } from "./orbit-accelerator";
 import type { OrbitProcessor } from "./orbit-processor";
 import type OrbitResetter from "./orbit-resetter";
