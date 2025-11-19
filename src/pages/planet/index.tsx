@@ -1,58 +1,22 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import PlanetCreateBox from "./boxes/planet-create-box";
 import CanvasContext from "./contexts/canvas-context";
-import PlanetContext from "./contexts/planet-context";
 import SpaceContext from "./contexts/space-context";
 import type Planet from "./models/planet";
 import type Point from "./models/point";
+import { PlanetStore } from "./store/planet-store";
 import { SimpleOrbitAccelerator } from "./utils/orbits/orbit-accelerator";
 import OrbitEngine from "./utils/orbits/orbit-engine";
 import { SimpleOrbitProcessor } from "./utils/orbits/orbit-processor";
 import { SimpleOrbitResetter } from "./utils/orbits/orbit-resetter";
 import type OrbitValidator from "./utils/orbits/orbit-validator";
 import { PositionOrbitValidator } from "./utils/orbits/orbit-validator";
-import { PlanetFactory } from "./utils/planet-factory.utils";
-import { PlanetPositionFactory, PlanetVelocityFactory, PointFactory } from "./utils/point-factory.utils";
-
-const N = 100;
+import { PointFactory } from "./utils/point-factory.utils";
 
 export default function PlanetPage() {
-    const planetContext = useContext(PlanetContext);
     const canvasContext = useContext(CanvasContext);
     const spaceContext = useContext(SpaceContext);
-    const initialPlanets = PlanetFactory.createMany(
-        planetContext.baseMass,
-        planetContext.baseRadius,
-        PlanetPositionFactory.withBound(
-            { x: canvasContext.width, y: canvasContext.height, z: 0 },
-            PointFactory.zero()
-        ).randomMany(N),
-        PlanetVelocityFactory.withVelocity(0.05).randomMany(N)
-    ).concat([
-        PlanetFactory.create(
-            99,
-            "MASS",
-            100000,
-            50,
-            { x: canvasContext.width / 2, y: canvasContext.height / 2, z: 0 },
-            PointFactory.zero()
-        ),
-        PlanetFactory.create(
-            999,
-            "MASS",
-            100000,
-            20,
-            { x: canvasContext.width / 3, y: canvasContext.height / 4, z: 0 },
-            PointFactory.zero()
-        ),
-        PlanetFactory.create(
-            9999,
-            "MASS",
-            100000,
-            20,
-            { x: canvasContext.width / 4, y: canvasContext.height / 3, z: 0 },
-            PointFactory.zero()
-        ),
-    ]);
+    const initialPlanets = useSyncExternalStore(PlanetStore.subscribe, PlanetStore.getSnapshot);
     const orbitValidator: OrbitValidator = useMemo(
         () =>
             new PositionOrbitValidator(
@@ -73,6 +37,7 @@ export default function PlanetPage() {
     const updateInterval = useRef(30);
 
     const [planets, setPlanets] = useState<Planet[]>(initialPlanets);
+    const planetsRef = useRef(planets);
     const [trajectories, setTrajectories] = useState<{ id: number; points: Point[] }[]>(
         initialPlanets.map((p) => ({ id: p.id, points: [] }))
     );
@@ -128,19 +93,16 @@ export default function PlanetPage() {
     }, [canvasContext.height, canvasContext.width, planets, trajectories]);
 
     useEffect(() => {
-        if (!planets) {
-            return;
-        }
         drawPlanets();
-    }, [drawPlanets, planets]);
+    }, [drawPlanets]);
 
     useEffect(() => {
         const animate = (timestamp: number) => {
             if (timestamp >= lastUpdateTimeRef.current + updateInterval.current) {
-                const nextPlanets: Planet[] = orbitEngine.createNextPlanets(planets);
+                const nextPlanets: Planet[] = orbitEngine.createNextPlanets(planetsRef.current);
                 setTrajectories((prev) => {
                     const newTrajectories = prev.map((t) => {
-                        const planet: Planet | undefined = planets.find((p) => p.id === t.id);
+                        const planet: Planet | undefined = nextPlanets.find((p) => p.id === t.id);
                         if (planet) {
                             if (!orbitValidator.validate(planet)) {
                                 return { id: t.id, points: [] };
@@ -155,7 +117,6 @@ export default function PlanetPage() {
                     });
                     return newTrajectories;
                 });
-                setPlanets(nextPlanets);
                 lastUpdateTimeRef.current = timestamp;
             }
             animationFrameRef.current = requestAnimationFrame(animate);
@@ -167,11 +128,18 @@ export default function PlanetPage() {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [initialPlanets, orbitEngine, planets, orbitValidator]);
+    }, [initialPlanets, orbitEngine, orbitValidator]);
 
     return (
         <div>
             <canvas ref={canvasRef} width={canvasContext.width} height={canvasContext.height} />
+            <PlanetCreateBox
+                position={{ x: 500, y: 500, z: 0 }}
+                onCreate={(planet: Planet) => {
+                    setPlanets((prev) => [...prev, planet]);
+                    setTrajectories((prev) => [...prev, { id: planet.id, points: [] }]);
+                }}
+            />
         </div>
     );
 }
