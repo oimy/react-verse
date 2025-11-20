@@ -1,8 +1,9 @@
 # ReactVerse
 
 ![](https://img.shields.io/badge/react-19.2-blue?logo=react)
-![](https://img.shields.io/badge/hooks-4-yellow?logo=reactquery)
-![](https://img.shields.io/badge/completion-0%25-green)
+![](https://img.shields.io/badge/hooks-18-blue?logo=reactquery&logoColor=61DAFB)
+![](https://img.shields.io/badge/prototype-100%25-blue)
+![](https://img.shields.io/badge/completion-0%25-red)
 
 > A React-based space simulation using entire hooks for tutorial purpose. Learn useState, useEffect, useRef, useReducer, and more while creating interactive planets, stars, and spaceships.
 
