@@ -29,11 +29,13 @@ function subscribe(callback: Listener): () => void {
     };
 }
 
-export function savePlanet(planet: Planet): void {
+export async function savePlanet(planet: Planet): Promise<Planet[]> {
+    await new Promise((res) => setTimeout(res, 1000));
     cachePlanets.push(planet);
     cachePlanetsString = JSON.stringify(cachePlanets);
     localStorage.setItem(KEY, cachePlanetsString);
     listeners.forEach((callback) => callback());
+    return cachePlanets;
 }
 
 export const PlanetStore = {
