@@ -8,13 +8,16 @@ import {
     useInsertionEffect,
     useLayoutEffect,
     useMemo,
+    useOptimistic,
     useReducer,
     useRef,
     useSyncExternalStore,
+    useTransition,
 } from "react";
 import PlanetCreateBox from "./boxes/planet-create-box";
 import CanvasContext from "./contexts/canvas-context";
 import SpaceContext from "./contexts/space-context";
+import { SimpleCanvasDownloader, type CanvasDownloader } from "./downloaders/canvas-downloader";
 import type Planet from "./models/planet";
 import type Point from "./models/point";
 import planetReducer from "./reducers/planet-reducer";
@@ -49,6 +52,8 @@ export default function PlanetPage() {
         return new OrbitEngine(orbitAccelerator, orbitProcessor, orbitResetter);
     }, [initialPlanets, orbitValidator, spaceContext.gravity, spaceContext.tick]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const canvasDownloader: CanvasDownloader = useMemo(() => new SimpleCanvasDownloader(canvasRef), []);
+
     const animationFrameRef = useRef<number>(null);
     const lastUpdateTimeRef = useRef(0);
     const updateInterval = useRef(50);
@@ -152,9 +157,25 @@ export default function PlanetPage() {
 
     const createRef = useRef<{ randomizeInputs: () => void }>(null);
     useDebugValue(planets.length);
+
+    const [, startTransition] = useTransition();
+
+    const [optimisticDownloadMessage, addOptimisticDownloadMessage] = useOptimistic("Capture");
+    const handleDownload = () => {
+        addOptimisticDownloadMessage("Capturing...");
+        startTransition(async () => {
+            await canvasDownloader.download();
+            addOptimisticDownloadMessage("Done!");
+
+            await new Promise((r) => setTimeout(r, 1000));
+            addOptimisticDownloadMessage("Capture");
+        });
+    };
+
     return (
         <div>
             <canvas ref={canvasRef} width={canvasContext.width} height={canvasContext.height} />
+            <button onClick={handleDownload}>{optimisticDownloadMessage}</button>
             <PlanetCreateBox
                 ref={createRef}
                 position={{ x: 700, y: 500, z: 0 }}
@@ -173,32 +194,6 @@ export default function PlanetPage() {
             >
                 randomize!
             </button>
-            {/* {initialPlanets.map((p) => (
-                <table>
-                    <tbody>
-                        <tr>
-                            <td>{p.mass}</td>
-                            <td>{p.radius}</td>
-                            <td>{p.position.x}</td>
-                            <td>{p.position.y}</td>
-                            <td>{p.position.z}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            ))}
-            {planets.map((p) => (
-                <table>
-                    <tbody>
-                        <tr>
-                            <td>{p.mass}</td>
-                            <td>{p.radius}</td>
-                            <td>{p.position.x}</td>
-                            <td>{p.position.y}</td>
-                            <td>{p.position.z}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            ))} */}
         </div>
     );
 }
