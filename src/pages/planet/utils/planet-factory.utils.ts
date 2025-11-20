@@ -1,5 +1,6 @@
 import type Planet from "../models/planet";
 import type Point from "../models/point";
+import { PointFactory } from "./point-factory.utils";
 
 export class PlanetFactory {
     static create(id: number, name: string, mass: number, radius: number, position: Point, velocity: Point): Planet {
@@ -25,5 +26,17 @@ export class PlanetFactory {
         }
 
         return planets;
+    }
+
+    static copy(planet: Planet): Planet {
+        return {
+            ...planet,
+            position: PointFactory.copy(planet.position),
+            velocity: PointFactory.copy(planet.velocity),
+        };
+    }
+
+    static copyAll(planets: Planet[]): Planet[] {
+        return planets.map(this.copy);
     }
 }

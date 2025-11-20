@@ -1,9 +1,25 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+    useCallback,
+    useContext,
+    useDebugValue,
+    useDeferredValue,
+    useEffect,
+    useEffectEvent,
+    useInsertionEffect,
+    useLayoutEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useSyncExternalStore,
+} from "react";
+import PlanetCreateBox from "./boxes/planet-create-box";
 import CanvasContext from "./contexts/canvas-context";
-import PlanetContext from "./contexts/planet-context";
 import SpaceContext from "./contexts/space-context";
 import type Planet from "./models/planet";
 import type Point from "./models/point";
+import planetReducer from "./reducers/planet-reducer";
+import trajectoryReducer from "./reducers/trajectory-reducer";
+import { PlanetStore, savePlanet } from "./store/planet-store";
 import { SimpleOrbitAccelerator } from "./utils/orbits/orbit-accelerator";
 import OrbitEngine from "./utils/orbits/orbit-engine";
 import { SimpleOrbitProcessor } from "./utils/orbits/orbit-processor";
@@ -11,53 +27,18 @@ import { SimpleOrbitResetter } from "./utils/orbits/orbit-resetter";
 import type OrbitValidator from "./utils/orbits/orbit-validator";
 import { PositionOrbitValidator } from "./utils/orbits/orbit-validator";
 import { PlanetFactory } from "./utils/planet-factory.utils";
-import { PlanetPositionFactory, PlanetVelocityFactory, PointFactory } from "./utils/point-factory.utils";
-
-const N = 100;
+import { PointFactory } from "./utils/point-factory.utils";
 
 export default function PlanetPage() {
-    const planetContext = useContext(PlanetContext);
+    // const window
     const canvasContext = useContext(CanvasContext);
     const spaceContext = useContext(SpaceContext);
-    const initialPlanets = PlanetFactory.createMany(
-        planetContext.baseMass,
-        planetContext.baseRadius,
-        PlanetPositionFactory.withBound(
-            { x: canvasContext.width, y: canvasContext.height, z: 0 },
-            PointFactory.zero()
-        ).randomMany(N),
-        PlanetVelocityFactory.withVelocity(0.05).randomMany(N)
-    ).concat([
-        PlanetFactory.create(
-            99,
-            "MASS",
-            100000,
-            50,
-            { x: canvasContext.width / 2, y: canvasContext.height / 2, z: 0 },
-            PointFactory.zero()
-        ),
-        PlanetFactory.create(
-            999,
-            "MASS",
-            100000,
-            20,
-            { x: canvasContext.width / 3, y: canvasContext.height / 4, z: 0 },
-            PointFactory.zero()
-        ),
-        PlanetFactory.create(
-            9999,
-            "MASS",
-            100000,
-            20,
-            { x: canvasContext.width / 4, y: canvasContext.height / 3, z: 0 },
-            PointFactory.zero()
-        ),
-    ]);
+    const initialPlanets = useSyncExternalStore(PlanetStore.subscribe, PlanetStore.getSnapshot);
     const orbitValidator: OrbitValidator = useMemo(
         () =>
             new PositionOrbitValidator(
-                PointFactory.create(canvasContext.width * 2, canvasContext.height * 2, 0),
-                PointFactory.create(canvasContext.width * -1, canvasContext.height * -1, 0)
+                PointFactory.create(canvasContext.width, canvasContext.height, 100),
+                PointFactory.create(0, 0, -100)
             ),
         [canvasContext.height, canvasContext.width]
     );
@@ -70,92 +51,92 @@ export default function PlanetPage() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationFrameRef = useRef<number>(null);
     const lastUpdateTimeRef = useRef(0);
-    const updateInterval = useRef(30);
+    const updateInterval = useRef(50);
 
-    const [planets, setPlanets] = useState<Planet[]>(initialPlanets);
-    const [trajectories, setTrajectories] = useState<{ id: number; points: Point[] }[]>(
+    const [planets, dispatchPlanets] = useReducer(planetReducer, PlanetFactory.copyAll(initialPlanets));
+    const planetsRef = useRef(planets);
+    const [trajectories, dispatchTrajectories] = useReducer(
+        trajectoryReducer,
         initialPlanets.map((p) => ({ id: p.id, points: [] }))
     );
+    const deferredTrajectories = useDeferredValue(trajectories);
 
-    const drawPlanets = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+    const drawTrajectories = useEffectEvent((context: CanvasRenderingContext2D) => {
+        deferredTrajectories.forEach((trajectory) => {
+            if (trajectory.points.length < 2) return;
 
-        ctx.clearRect(0, 0, canvasContext.width, canvasContext.height);
-        ctx.fillStyle = "#111111";
-        ctx.fillRect(0, 0, canvasContext.width, canvasContext.height);
+            context.beginPath();
+            context.strokeStyle = "gray";
+            context.lineWidth = 2;
 
-        trajectories.forEach((t) => {
-            const planet = planets.find((p) => p.id === t.id);
-            if (!planet || t.points.length < 2) return;
+            const firstPoint: Point = trajectory.points[0];
+            context.moveTo(firstPoint.x, firstPoint.y);
 
-            ctx.beginPath();
-            ctx.strokeStyle = "gray";
-            ctx.lineWidth = 2;
-
-            const firstPoint: Point = t.points[0];
-            ctx.moveTo(firstPoint.x, firstPoint.y);
-
-            for (let i = 1; i < t.points.length; i++) {
+            for (let i = 1; i < trajectory.points.length; i++) {
                 if (
-                    Math.abs(t.points[i].x - t.points[i - 1].x) > 100 ||
-                    Math.abs(t.points[i].y - t.points[i - 1].y) > 100
+                    Math.abs(trajectory.points[i].x - trajectory.points[i - 1].x) > 100 ||
+                    Math.abs(trajectory.points[i].y - trajectory.points[i - 1].y) > 100
                 ) {
-                    ctx.moveTo(t.points[i].x, t.points[i].y);
+                    context.moveTo(trajectory.points[i].x, trajectory.points[i].y);
                 }
-                const point: Point = t.points[i];
-                ctx.lineTo(point.x, point.y);
+                const point: Point = trajectory.points[i];
+                context.lineTo(point.x, point.y);
             }
-            ctx.stroke();
+            context.stroke();
         });
+    });
 
-        const sortedPlanets = [...planets].sort((p1, p2) => p1.position.z - p2.position.z);
-        sortedPlanets.forEach((planet) => {
-            ctx.beginPath();
+    const drawPlanets = useCallback(
+        (context: CanvasRenderingContext2D) => {
+            const sortedPlanets = [...planets].sort((p1, p2) => p1.position.z - p2.position.z);
+            sortedPlanets.forEach((planet) => {
+                context.beginPath();
 
-            ctx.arc(
-                planet.position.x,
-                planet.position.y,
-                Math.max((planet.radius * (planet.position.z + 100)) / 100, 2),
-                0,
-                2 * Math.PI
-            );
-            ctx.fillStyle = "lightgray";
-            ctx.fill();
-        });
-    }, [canvasContext.height, canvasContext.width, planets, trajectories]);
+                context.arc(
+                    planet.position.x,
+                    planet.position.y,
+                    Math.max((planet.radius * (planet.position.z + 100)) / 100, 2),
+                    0,
+                    2 * Math.PI
+                );
+                context.fillStyle = "lightgray";
+                context.fill();
+            });
+        },
+        [planets]
+    );
 
-    useEffect(() => {
-        if (!planets) {
-            return;
+    useLayoutEffect(() => {
+        const canvas: HTMLCanvasElement | null = canvasRef.current;
+        if (!canvas) return;
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+
+        const context: CanvasRenderingContext2D | null = canvas.getContext("2d");
+        if (!context) return;
+        context.clearRect(0, 0, canvasContext.width, canvasContext.height);
+
+        drawTrajectories(context);
+        drawPlanets(context);
+    }, [canvasContext.height, canvasContext.width, drawPlanets]);
+
+    useInsertionEffect(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            canvas.style.background = "#222222";
         }
-        drawPlanets();
-    }, [drawPlanets, planets]);
+    }, []);
+
+    const runFrame = useEffectEvent(() => {
+        const nextPlanets: Planet[] = orbitEngine.createNextPlanets(planetsRef.current);
+        dispatchPlanets({ type: "reset", planets: nextPlanets });
+        dispatchTrajectories({ type: "move", planets: nextPlanets, orbitValidator: orbitValidator });
+    });
 
     useEffect(() => {
         const animate = (timestamp: number) => {
             if (timestamp >= lastUpdateTimeRef.current + updateInterval.current) {
-                const nextPlanets: Planet[] = orbitEngine.createNextPlanets(planets);
-                setTrajectories((prev) => {
-                    const newTrajectories = prev.map((t) => {
-                        const planet: Planet | undefined = planets.find((p) => p.id === t.id);
-                        if (planet) {
-                            if (!orbitValidator.validate(planet)) {
-                                return { id: t.id, points: [] };
-                            }
-                            const newPoints = [...t.points, PointFactory.copy(planet.position)];
-                            if (newPoints.length > 300) {
-                                newPoints.shift();
-                            }
-                            return { id: t.id, points: newPoints };
-                        }
-                        return { id: t.id, points: [] };
-                    });
-                    return newTrajectories;
-                });
-                setPlanets(nextPlanets);
+                runFrame();
                 lastUpdateTimeRef.current = timestamp;
             }
             animationFrameRef.current = requestAnimationFrame(animate);
@@ -167,11 +148,57 @@ export default function PlanetPage() {
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [initialPlanets, orbitEngine, planets, orbitValidator]);
+    }, [orbitEngine, orbitValidator]);
 
+    const createRef = useRef<{ randomizeInputs: () => void }>(null);
+    useDebugValue(planets.length);
     return (
         <div>
             <canvas ref={canvasRef} width={canvasContext.width} height={canvasContext.height} />
+            <PlanetCreateBox
+                ref={createRef}
+                position={{ x: 700, y: 500, z: 0 }}
+                onCreate={(planet: Planet) => {
+                    dispatchPlanets({ type: "add", planet });
+                    dispatchTrajectories({ type: "add", planet });
+                    planetsRef.current.push(PlanetFactory.copy(planet));
+                    savePlanet(planet);
+                }}
+            />
+            <button
+                onClick={() => {
+                    if (!createRef.current) return;
+                    createRef.current.randomizeInputs();
+                }}
+            >
+                randomize!
+            </button>
+            {/* {initialPlanets.map((p) => (
+                <table>
+                    <tbody>
+                        <tr>
+                            <td>{p.mass}</td>
+                            <td>{p.radius}</td>
+                            <td>{p.position.x}</td>
+                            <td>{p.position.y}</td>
+                            <td>{p.position.z}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            ))}
+            {planets.map((p) => (
+                <table>
+                    <tbody>
+                        <tr>
+                            <td>{p.mass}</td>
+                            <td>{p.radius}</td>
+                            <td>{p.position.x}</td>
+                            <td>{p.position.y}</td>
+                            <td>{p.position.z}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            ))} */}
         </div>
     );
 }
